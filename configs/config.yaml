@@ -1,0 +1,5 @@
+data_ingestion:
+  root_dir: data
+  source_url: https://github.com/A-SHI-M/data/raw/refs/heads/main/ecommerce_customer_churn_dataset.zip
+  local_data_file: data/ecommerce_customer_churn_dataset.zip
+  unzip_dir: data

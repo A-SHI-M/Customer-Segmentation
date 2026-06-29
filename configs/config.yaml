@@ -3,3 +3,37 @@ data_ingestion:
   source_url: https://github.com/A-SHI-M/data/raw/refs/heads/main/ecommerce_customer_churn_dataset.zip
   local_data_file: data/ecommerce_customer_churn_dataset.zip
   unzip_dir: data
+
+data_transformation:
+  random_seed: 42
+  data_raw: data/ecommerce_customer_churn_dataset.csv
+  data_processed: data/processed/ecommerce_processed.csv
+  models_dir: models
+  numerical_features:
+    - Age
+    - Membership_Years
+    - Login_Frequency
+    - Session_Duration_Avg
+    - Pages_Per_Session
+    - Cart_Abandonment_Rate
+    - Wishlist_Items
+    - Total_Purchases
+    - Average_Order_Value
+    - Days_Since_Last_Purchase
+    - Discount_Usage_Rate
+    - Returns_Rate
+    - Email_Open_Rate
+    - Customer_Service_Calls
+    - Product_Reviews_Written
+    - Social_Media_Engagement_Score
+    - Mobile_App_Usage
+    - Payment_Method_Diversity
+    - Lifetime_Value
+    - Credit_Balance
+  engineered_features:
+    - Total_Spending
+    - Purchase_Frequency
+    - RFM_Recency
+    - RFM_Frequency
+    - RFM_Monetary
+    - Customer_Age_Group

@@ -19,3 +19,19 @@ class DataTransformationConfig:
     models_dir: Path
     numerical_features: List[str]
     engineered_features: List[str]
+
+
+@dataclass(frozen=True)
+class ModelTrainerConfig:
+    data_processed: Path
+    scaler_path: Path
+    model_path: Path
+    artifacts_dir: Path
+    cluster_profiles_path: Path
+    experiment_name: str
+    feature_cols: List[str]
+    k_min: int
+    k_max: int
+    n_init: int
+    max_iter: int
+    random_seed: int

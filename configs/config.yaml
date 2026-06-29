@@ -37,3 +37,11 @@ data_transformation:
     - RFM_Frequency
     - RFM_Monetary
     - Customer_Age_Group
+
+model_trainer:
+  data_processed: data/processed/ecommerce_processed.csv
+  scaler_path: models/scaler.pkl
+  model_path: models/kmeans_model.pkl
+  artifacts_dir: artifacts
+  cluster_profiles_path: artifacts/cluster_profiles.csv
+  experiment_name: customer-segmentation

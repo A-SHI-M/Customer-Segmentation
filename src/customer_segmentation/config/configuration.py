@@ -1,7 +1,7 @@
 from pathlib import Path
 from customer_segmentation.constants import CONFIG_FILE_PATH, PARAMS_FILE_PATH
 from customer_segmentation.utils import read_yaml, create_directories
-from customer_segmentation.entity.config_entity import DataIngestionConfig, DataTransformationConfig
+from customer_segmentation.entity.config_entity import DataIngestionConfig, DataTransformationConfig, ModelTrainerConfig
 
 
 class ConfigurationManager:
@@ -36,4 +36,25 @@ class ConfigurationManager:
             models_dir=Path(config["models_dir"]),
             numerical_features=config["numerical_features"],
             engineered_features=config["engineered_features"],
+        )
+
+    def get_model_trainer_config(self) -> ModelTrainerConfig:
+        cfg = self.config["model_trainer"]
+        dt_cfg = self.config["data_transformation"]
+        p = self.params
+        feature_cols = dt_cfg["numerical_features"] + dt_cfg["engineered_features"]
+        create_directories([Path(cfg["artifacts_dir"]), Path(cfg["model_path"]).parent])
+        return ModelTrainerConfig(
+            data_processed=Path(cfg["data_processed"]),
+            scaler_path=Path(cfg["scaler_path"]),
+            model_path=Path(cfg["model_path"]),
+            artifacts_dir=Path(cfg["artifacts_dir"]),
+            cluster_profiles_path=Path(cfg["cluster_profiles_path"]),
+            experiment_name=cfg["experiment_name"],
+            feature_cols=feature_cols,
+            k_min=p["K_MIN"],
+            k_max=p["K_MAX"],
+            n_init=p["N_INIT"],
+            max_iter=p["MAX_ITER"],
+            random_seed=p["RANDOM_SEED"],
         )

@@ -22,6 +22,13 @@ class DataTransformationConfig:
 
 
 @dataclass(frozen=True)
+class ModelPredictionConfig:
+    model_path: Path
+    scaler_path: Path
+    predictions_path: Path
+
+
+@dataclass(frozen=True)
 class ModelEvaluationConfig:
     model_path: Path
     scaler_path: Path

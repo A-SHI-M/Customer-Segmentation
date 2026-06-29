@@ -53,3 +53,8 @@ model_evaluation:
   artifacts_dir: artifacts
   metrics_path: artifacts/evaluation_metrics.json
   experiment_name: customer-segmentation
+
+model_prediction:
+  model_path: models/kmeans_model.pkl
+  scaler_path: models/scaler.pkl
+  predictions_path: artifacts/predictions.csv

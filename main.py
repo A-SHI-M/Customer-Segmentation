@@ -13,6 +13,10 @@ from customer_segmentation.pipelines.stage_03_model_trainer import (
     ModelTrainerPipeline,
     STAGE_NAME as STAGE_03_NAME,
 )
+from customer_segmentation.pipelines.stage_04_model_evaluation import (
+    ModelEvaluationPipeline,
+    STAGE_NAME as STAGE_04_NAME,
+)
 
 # Stage 01: Data Ingestion
 try:
@@ -40,6 +44,16 @@ try:
     obj = ModelTrainerPipeline()
     obj.initiate_model_training()
     print(f">>>>>> Stage: {STAGE_03_NAME} completed <<<<<<\n\n{'=' * 50}")
+except Exception as e:
+    print(f"Stage failed: {e}")
+    raise e
+
+# Stage 04: Model Evaluation
+try:
+    print(f">>>>>> Stage: {STAGE_04_NAME} started <<<<<<")
+    obj = ModelEvaluationPipeline()
+    obj.initiate_model_evaluation()
+    print(f">>>>>> Stage: {STAGE_04_NAME} completed <<<<<<\n\n{'=' * 50}")
 except Exception as e:
     print(f"Stage failed: {e}")
     raise e

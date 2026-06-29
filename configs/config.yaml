@@ -45,3 +45,11 @@ model_trainer:
   artifacts_dir: artifacts
   cluster_profiles_path: artifacts/cluster_profiles.csv
   experiment_name: customer-segmentation
+
+model_evaluation:
+  model_path: models/kmeans_model.pkl
+  scaler_path: models/scaler.pkl
+  data_processed: data/processed/ecommerce_processed.csv
+  artifacts_dir: artifacts
+  metrics_path: artifacts/evaluation_metrics.json
+  experiment_name: customer-segmentation

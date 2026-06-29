@@ -22,6 +22,16 @@ class DataTransformationConfig:
 
 
 @dataclass(frozen=True)
+class ModelEvaluationConfig:
+    model_path: Path
+    scaler_path: Path
+    data_processed: Path
+    artifacts_dir: Path
+    metrics_path: Path
+    experiment_name: str
+
+
+@dataclass(frozen=True)
 class ModelTrainerConfig:
     data_processed: Path
     scaler_path: Path

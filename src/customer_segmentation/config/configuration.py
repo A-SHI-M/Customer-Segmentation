@@ -1,7 +1,7 @@
 from pathlib import Path
 from customer_segmentation.constants import CONFIG_FILE_PATH, PARAMS_FILE_PATH
 from customer_segmentation.utils import read_yaml, create_directories
-from customer_segmentation.entity.config_entity import DataIngestionConfig, DataTransformationConfig, ModelTrainerConfig
+from customer_segmentation.entity.config_entity import DataIngestionConfig, DataTransformationConfig, ModelTrainerConfig, ModelEvaluationConfig
 
 
 class ConfigurationManager:
@@ -57,4 +57,16 @@ class ConfigurationManager:
             n_init=p["N_INIT"],
             max_iter=p["MAX_ITER"],
             random_seed=p["RANDOM_SEED"],
+        )
+
+    def get_model_evaluation_config(self) -> ModelEvaluationConfig:
+        cfg = self.config["model_evaluation"]
+        create_directories([Path(cfg["artifacts_dir"])])
+        return ModelEvaluationConfig(
+            model_path=Path(cfg["model_path"]),
+            scaler_path=Path(cfg["scaler_path"]),
+            data_processed=Path(cfg["data_processed"]),
+            artifacts_dir=Path(cfg["artifacts_dir"]),
+            metrics_path=Path(cfg["metrics_path"]),
+            experiment_name=cfg["experiment_name"],
         )

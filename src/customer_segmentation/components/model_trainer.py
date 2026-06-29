@@ -168,8 +168,13 @@ class ModelTrainer:
             df, label_map = self.assign_segment_labels(df, labels)
             profiles_path = self.build_cluster_profiles(df)
 
-            joblib.dump(kmeans, cfg.model_path)
-            logger.info(f"KMeans model saved to {cfg.model_path}")
+            bundle = {
+                "model": kmeans,
+                "label_map": label_map,
+                "feature_cols": cfg.feature_cols,
+            }
+            joblib.dump(bundle, cfg.model_path)
+            logger.info(f"Model bundle saved to {cfg.model_path}")
 
             with mlflow.start_run():
                 mlflow.log_params({

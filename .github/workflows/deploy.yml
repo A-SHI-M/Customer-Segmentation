@@ -1,0 +1,97 @@
+name: Deploy to AWS EC2
+
+# ── Trigger ───────────────────────────────────────────────────────────────────
+# This workflow runs automatically every time you push a commit to the main branch.
+# It builds a fresh Docker image, stores it in AWS ECR, then SSHs into your EC2
+# instance and swaps the running container with the new image.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    # GitHub provides a free Ubuntu virtual machine to run these steps.
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── Step 1: Get the code ─────────────────────────────────────────────────
+      # Downloads your repository into the runner so the Dockerfile and app.py
+      # are available for the build step.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Step 2: Connect to AWS ───────────────────────────────────────────────
+      # Loads your AWS credentials from GitHub Secrets and configures the
+      # AWS CLI so every subsequent aws/docker command knows which account
+      # and region to talk to.
+      # Never put actual keys here — always use ${{ secrets.X }} syntax.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      # ── Step 3: Log Docker into ECR ──────────────────────────────────────────
+      # ECR (Elastic Container Registry) is AWS's private Docker registry.
+      # This step generates a temporary token and logs Docker in so we can
+      # push images. The `id: login-ecr` lets later steps reference the
+      # registry URL via ${{ steps.login-ecr.outputs.registry }}.
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Step 4: Build and push the Docker image ──────────────────────────────
+      # Builds the image from our Dockerfile, then tags it twice:
+      #   :latest         — so EC2 always knows what "current" means
+      #   :<commit-SHA>   — unique tag per deploy for rollback traceability
+      # Then pushes both tags to ECR.
+      - name: Build, tag, and push image to ECR
+        env:
+          ECR_REGISTRY:   ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG:      ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag  $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+                      $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # ── Step 5: Deploy on EC2 ────────────────────────────────────────────────
+      # Uses the appleboy/ssh-action to open an SSH connection to your EC2
+      # instance and run the deployment commands remotely.
+      #
+      # What the script does on EC2:
+      #   1. Authenticates Docker on EC2 to ECR (ECR tokens expire, so we
+      #      refresh them on every deploy)
+      #   2. Pulls the new :latest image from ECR
+      #   3. Stops and removes the old container gracefully (|| true means
+      #      "don't fail if no container is running yet")
+      #   4. Starts a fresh container:
+      #        -d                   → run in background (detached)
+      #        --name               → give it a fixed name so we can stop it next time
+      #        --restart unless-stopped → auto-restart on EC2 reboot
+      #        -p 8501:8501         → map EC2 port 8501 to container port 8501
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key:      ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} \
+              | docker login --username AWS --password-stdin \
+                ${{ steps.login-ecr.outputs.registry }}
+
+            docker pull ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest
+
+            docker stop customer-segmentation 2>/dev/null || true
+            docker rm   customer-segmentation 2>/dev/null || true
+
+            docker run -d \
+              --name customer-segmentation \
+              --restart unless-stopped \
+              -p 8501:8501 \
+              ${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY }}:latest

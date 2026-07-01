@@ -1,0 +1,12 @@
+venv/
+.env
+logs/
+notebooks/
+data/
+python-3.12.10/
+artifacts/
+src/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/

@@ -6,10 +6,10 @@ Upload a CSV, get cluster assignments, visualize segments, download results.
 """
 
 import io
-import json
 import sys
 from pathlib import Path
 
+import joblib
 import matplotlib
 matplotlib.use("Agg")
 import numpy as np
@@ -18,13 +18,87 @@ import plotly.express as px
 import streamlit as st
 from sklearn.decomposition import PCA
 
-sys.path.insert(0, str(Path(__file__).parent))
+# ── Segment metadata ──────────────────────────────────────────────────────────
+SEGMENT_DESCRIPTIONS = {
+    "VIP Customers": {
+        "description": "Highest lifetime value; premium spenders with frequent, recent purchases.",
+        "strategy": "Exclusive loyalty rewards, early-access offers, dedicated account manager.",
+        "icon": "👑",
+    },
+    "Loyal Customers": {
+        "description": "Regular buyers with strong engagement and consistent spending.",
+        "strategy": "Loyalty programs, personalised recommendations, birthday discounts.",
+        "icon": "⭐",
+    },
+    "Potential Customers": {
+        "description": "Moderate spenders showing growth signals; not yet fully committed.",
+        "strategy": "Targeted upsell campaigns, product education, limited-time offers.",
+        "icon": "🚀",
+    },
+    "New Customers": {
+        "description": "Recently acquired; low tenure and purchase history.",
+        "strategy": "Welcome series, onboarding guides, first-purchase incentives.",
+        "icon": "🌱",
+    },
+    "At-Risk Customers": {
+        "description": "Low recent activity; at risk of churning.",
+        "strategy": "Win-back campaigns, personalised outreach, reactivation discounts.",
+        "icon": "⚠️",
+    },
+}
 
-from customer_segmentation.config.configuration import ConfigurationManager
-from customer_segmentation.components.model_prediction import (
-    ModelPrediction,
-    SEGMENT_DESCRIPTIONS,
-)
+# ── Prediction helpers ────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner="Loading model ...")
+def load_model():
+    bundle = joblib.load("models/kmeans_model.pkl")
+    scaler = joblib.load("models/scaler.pkl")
+    return bundle["model"], scaler, bundle["label_map"], bundle["feature_cols"]
+
+
+def _engineer_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["Total_Spending"] = df.get("Lifetime_Value", df.get("Total_Spending", 0))
+    membership = df["Membership_Years"] if "Membership_Years" in df.columns else pd.Series(np.ones(len(df)))
+    df["Purchase_Frequency"] = df.get("Total_Purchases", pd.Series(np.zeros(len(df)))) / membership.clip(lower=0.1)
+    days = df["Days_Since_Last_Purchase"] if "Days_Since_Last_Purchase" in df.columns else pd.Series([30] * len(df))
+    df["RFM_Recency"] = 1 / (days + 1)
+    df["RFM_Frequency"] = df.get("Total_Purchases", pd.Series(np.zeros(len(df))))
+    df["RFM_Monetary"] = df.get("Lifetime_Value", pd.Series(np.zeros(len(df))))
+    age = df["Age"] if "Age" in df.columns else pd.Series([35] * len(df))
+    df["Customer_Age_Group"] = pd.cut(age, bins=[0, 30, 50, 200], labels=[0, 1, 2]).astype(float)
+    return df
+
+
+def _preprocess_input(df: pd.DataFrame, feature_cols: list, scaler) -> np.ndarray:
+    df = df.copy()
+    if "Gender" in df.columns:
+        df["Gender_Encoded"] = (df["Gender"] == "Male").astype(int)
+    df = _engineer_features(df)
+    for col in feature_cols:
+        if col not in df.columns:
+            df[col] = 0
+    df[feature_cols] = df[feature_cols].fillna(0)
+    return scaler.transform(df[feature_cols].values)
+
+
+def predict(raw_df: pd.DataFrame) -> pd.DataFrame:
+    model, scaler, label_map, feature_cols = load_model()
+    X_scaled = _preprocess_input(raw_df, feature_cols, scaler)
+    clusters = model.predict(X_scaled)
+    df = raw_df.copy()
+    df["Cluster"] = clusters
+    df["Segment"] = df["Cluster"].map(label_map)
+    df["Segment_Description"] = df["Segment"].map(
+        lambda s: SEGMENT_DESCRIPTIONS.get(s, {}).get("description", "Unknown")
+    )
+    df["Marketing_Strategy"] = df["Segment"].map(
+        lambda s: SEGMENT_DESCRIPTIONS.get(s, {}).get("strategy", "Unknown")
+    )
+    df["Icon"] = df["Segment"].map(
+        lambda s: SEGMENT_DESCRIPTIONS.get(s, {}).get("icon", "❓")
+    )
+    return df
+
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -36,26 +110,13 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-.metric-card {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 1rem; border-radius: 0.75rem; color: white;
-    text-align: center; margin-bottom: 0.5rem;
-}
 h1 { color: #1f2937; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Load model (cached) ───────────────────────────────────────────────────────
-@st.cache_resource(show_spinner="Loading model ...")
-def get_predictor():
-    config = ConfigurationManager()
-    pred_config = config.get_model_prediction_config()
-    return ModelPrediction(config=pred_config)
-
-
+# ── Load model ────────────────────────────────────────────────────────────────
 try:
-    predictor = get_predictor()
-    model, scaler, label_map, feature_cols = predictor.load_artifacts()
+    model, scaler, label_map, feature_cols = load_model()
 except Exception as e:
     st.error(f"No trained model found. Run `python main.py` first.\n\n{e}")
     st.stop()
@@ -84,19 +145,13 @@ st.markdown(
 )
 st.markdown("---")
 
-# ── Resolve input data ────────────────────────────────────────────────────────
-if uploaded_file is not None:
-    raw_df = pd.read_csv(uploaded_file)
-else:
-    sample_path = Path("data/ecommerce_customer_churn_dataset.csv")
-    if sample_path.exists():
-        st.info("👈 No file uploaded — showing demo with built-in dataset (500 rows).")
-        raw_df = pd.read_csv(sample_path, nrows=500)
-    else:
-        st.info("👈 Upload a CSV file in the sidebar to get started.")
-        st.stop()
+# ── Require file upload ───────────────────────────────────────────────────────
+if uploaded_file is None:
+    st.info("👈 Upload a CSV file in the sidebar to get started.")
+    st.stop()
 
-result_df = predictor.predict(raw_df)
+raw_df = pd.read_csv(uploaded_file)
+result_df = predict(raw_df)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 n_customers = len(result_df)
@@ -144,7 +199,7 @@ with chart2:
 st.subheader("🔵 PCA Cluster Visualization")
 
 try:
-    X_scaled = predictor._preprocess_input(raw_df.copy(), feature_cols, scaler)
+    X_scaled = _preprocess_input(raw_df, feature_cols, scaler)
     pca = PCA(n_components=2, random_state=42)
     X_pca = pca.fit_transform(X_scaled)
     ev = pca.explained_variance_ratio_
@@ -218,21 +273,6 @@ st.download_button(
     file_name="customer_segments.csv",
     mime="text/csv",
 )
-
-# ── Evaluation Metrics ────────────────────────────────────────────────────────
-metrics_path = Path("artifacts/evaluation_metrics.json")
-if metrics_path.exists():
-    st.markdown("---")
-    st.subheader("📈 Model Evaluation Metrics")
-    with open(metrics_path) as f:
-        metrics = json.load(f)
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Silhouette Score", f"{metrics.get('silhouette_score', 0):.4f}",
-              help="Higher is better (max 1.0)")
-    m2.metric("Davies-Bouldin Index", f"{metrics.get('davies_bouldin_index', 0):.4f}",
-              help="Lower is better")
-    m3.metric("Calinski-Harabasz Score", f"{metrics.get('calinski_harabasz_score', 0):,.1f}",
-              help="Higher is better")
 
 st.markdown("---")
 st.caption("Built with Streamlit · Scikit-learn · MLflow | Customer Segmentation ML Project")
